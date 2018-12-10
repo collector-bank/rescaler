@@ -12,8 +12,8 @@ namespace Rescaler
         {
             var watch = Stopwatch.StartNew();
 
-            string[] parsedArgs = args;
-            string usage = @"Usage: rescaler [-simulate] [-verbose] <edition> <size> [+includedb1] [-excludedb1] [+excludedb1] [-excludedb2] ...
+            string[] parsedArgs = args.TakeWhile(a => a != "--").ToArray();
+            string usage = @"Usage: rescaler [-simulate] [-verbose] <edition> <size> [+includedb1] [-excludedb1] [+includedb2] [-excludedb2] ...
 
 simulate:     Dry run
 verbose:      Verbose logging
