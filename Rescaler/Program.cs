@@ -13,10 +13,19 @@ namespace Rescaler
             var watch = Stopwatch.StartNew();
 
             string[] parsedArgs = args;
-            string usage = "Usage: rescaler [-simulate] <edition> <size> [+includedb1] [-excludedb1] [+excludedb1] [-excludedb2] ...";
+            string usage = @"Usage: rescaler [-simulate] [-verbose] <edition> <size> [+includedb1] [-excludedb1] [+excludedb1] [-excludedb2] ...
+
+simulate:     Dry run
+verbose:      Verbose logging
+edition:      Basic/Standard/Premium
+size:         Basic/S0.../P1...
+includedb1:   regex";
 
             bool simulate = parsedArgs.Contains("-simulate");
             parsedArgs = parsedArgs.Where(a => a != "-simulate").ToArray();
+
+            bool verbose = parsedArgs.Contains("-verbose");
+            parsedArgs = parsedArgs.Where(a => a != "-verbose").ToArray();
 
             if (parsedArgs.Length < 2)
             {
@@ -34,12 +43,12 @@ namespace Rescaler
                 return 1;
             }
 
-            var invaliddbs = filterdbs.Where(db => !db.StartsWith('+') && !db.StartsWith('-')).ToArray();
-            if (invaliddbs.Length > 0)
+            var invalidfilters = filterdbs.Where(db => !db.StartsWith('+') && !db.StartsWith('-')).ToArray();
+            if (invalidfilters.Length > 0)
             {
-                foreach (var db in invaliddbs)
+                foreach (var filter in invalidfilters)
                 {
-                    Log($"Include/Exclude filters must be prefixed with + or -: '{db}'");
+                    Log($"Include/Exclude filters must be prefixed with + or -: '{filter}'");
                 }
                 Log(usage);
                 return 1;
@@ -58,7 +67,7 @@ namespace Rescaler
             var servicePrincipals = GetServicePrincipals();
             if (servicePrincipals.Length == 0)
             {
-                Log("Missing environment variables: AzureTenantId, AzureSubscriptionId, AzureClientId, AzureClientSecret");
+                Log("Missing environment variables: AzureTenantId, AzureClientId, AzureClientSecret");
                 return 1;
             }
 
@@ -76,7 +85,7 @@ namespace Rescaler
 
             var rescaler = new Rescaler();
 
-            var tasks = accessTokens.Select(accessToken => rescaler.RescaleAsync(accessToken, dbedition, dbsize, filterdbs, simulate));
+            var tasks = accessTokens.Select(accessToken => rescaler.RescaleAsync(accessToken, dbedition, dbsize, filterdbs, simulate, verbose));
             await Task.WhenAll(tasks);
 
             Log($"Total done: {watch.Elapsed.ToString()}");
@@ -86,7 +95,7 @@ namespace Rescaler
 
         static ServicePrincipal[] GetServicePrincipals()
         {
-            string[] validVariables = { "AzureTenantId", "AzureSubscriptionId", "AzureClientId", "AzureClientSecret" };
+            string[] validVariables = { "AzureTenantId", "AzureClientId", "AzureClientSecret" };
 
             var creds =
                 Environment.GetEnvironmentVariables()
@@ -107,16 +116,11 @@ namespace Rescaler
                 List<string> missingVariables = new List<string>();
 
                 string tenantId = cred.SingleOrDefault(c => c.Key.Contains("AzureTenantId")).Value;
-                string subscriptionId = cred.SingleOrDefault(c => c.Key.Contains("AzureSubscriptionId")).Value;
                 string clientId = cred.SingleOrDefault(c => c.Key.Contains("AzureClientId")).Value;
                 string clientSecret = cred.SingleOrDefault(c => c.Key.Contains("AzureClientSecret")).Value;
                 if (tenantId == null)
                 {
                     missingVariables.Add("AzureTenantId");
-                }
-                if (subscriptionId == null)
-                {
-                    missingVariables.Add("AzureSubscriptionId");
                 }
                 if (clientId == null)
                 {
@@ -137,7 +141,6 @@ namespace Rescaler
                     {
                         FriendlyName = string.Join('.', (new[] { cred.Key.prefix, cred.Key.postfix }).Where(p => !string.IsNullOrEmpty(p))),
                         TenantId = tenantId,
-                        SubscriptionId = subscriptionId,
                         ClientId = clientId,
                         ClientSecret = clientSecret
                     });

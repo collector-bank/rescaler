@@ -13,7 +13,7 @@ namespace Rescaler
 {
     class Rescaler
     {
-        public async Task RescaleAsync(ServicePrincipal servicePrincipal, string dbedition, string dbsize, string[] filterdbs, bool simulate)
+        public async Task RescaleAsync(ServicePrincipal servicePrincipal, string dbedition, string dbsize, string[] filterdbs, bool simulate, bool verbose)
         {
             using (var client = new HttpClient())
             {
@@ -28,17 +28,17 @@ namespace Rescaler
                 dynamic result = await Http.GetHttpStringAsync(client, url);
                 JArray subscriptions = result.value;
 
-                //Log($"{servicePrincipal.FriendlyName}: Found {subscriptions.Count} subscriptions.");
+                if (verbose)
+                    Log($"{servicePrincipal.FriendlyName}: Found {subscriptions.Count} subscriptions.");
 
                 foreach (dynamic subscription in subscriptions)
                 {
-                    //string subscriptionName = subscription.displayName;
-
                     url = $"{subscription.id.Value}/providers/Microsoft.Sql/servers?api-version=2015-05-01-preview";
                     result = await Http.GetHttpStringAsync(client, url);
                     JArray sqlservers = result.value;
 
-                    //Log($"{servicePrincipal.FriendlyName}: {subscriptionName}: Found {sqlservers.Count} sqlservers.");
+                    if (verbose)
+                        Log($"{servicePrincipal.FriendlyName}: {subscription.displayName}: Found {sqlservers.Count} sqlservers.");
 
                     foreach (dynamic sqlserver in sqlservers)
                     {
@@ -46,11 +46,14 @@ namespace Rescaler
                         result = await Http.GetHttpStringAsync(client, url);
                         JArray databases = result.value;
 
-                        //Log($"{servicePrincipal.FriendlyName}: {subscriptionName}: {sqlserver.name.Value}: Found {databases.Count} databases.");
+                        if (verbose)
+                            Log($"{servicePrincipal.FriendlyName}: {subscription.displayName}: {sqlserver.name.Value}: Found {databases.Count} databases.");
 
                         foreach (dynamic database in databases)
                         {
-                            //Log($"  {database.name.Value}");
+                            if (verbose)
+                                Log($"  {database.name.Value}");
+
                             alldbs.Add(new Database
                             {
                                 ID = database.id.Value,
@@ -119,18 +122,18 @@ namespace Rescaler
                     }
                 }
 
-                //Log($"{servicePrincipal.FriendlyName}: Found {sqlservers.Count} sqlservers.");
-                //Log($"{servicePrincipal.FriendlyName}: Found {databases.Count} databases.");
+                if (verbose)
+                    Log($"{servicePrincipal.FriendlyName}: Found {alldbs.Count} databases.");
 
                 foreach (var db in alldbs)
                 {
                     Log($"Scaling: {db.ID}: {db.Edition}/{db.Size} -> {dbedition}/{dbsize}");
-                    await ScaleSQLServerAsync(client, db.ID, db.Location, dbedition, dbsize, simulate);
+                    await ScaleSQLServerAsync(client, db.ID, db.Location, dbedition, dbsize, simulate, verbose);
                 }
             }
         }
 
-        async Task ScaleSQLServerAsync(HttpClient client, string dbid, string location, string edition, string level, bool simulate)
+        async Task ScaleSQLServerAsync(HttpClient client, string dbid, string location, string edition, string level, bool simulate, bool verbose)
         {
             string url = $"{dbid}?api-version=2014-04-01";
 
@@ -146,7 +149,8 @@ namespace Rescaler
                 string operation = result.operation;
                 string startTime = result.startTime;
 
-                //Log($"{dbid}: Result: {operation} {startTime}");
+                if (verbose)
+                    Log($"{dbid}: Result: {operation} {startTime}");
             }
         }
 
