@@ -19,7 +19,7 @@ simulate:     Dry run
 verbose:      Verbose logging
 edition:      Basic/Standard/Premium
 size:         Basic/S0.../P1...
-includedb1:   regex";
+includedb1:   Substring to contain (name of: resource group, server, database)";
 
             bool simulate = parsedArgs.Contains("-simulate");
             parsedArgs = parsedArgs.Where(a => a != "-simulate").ToArray();

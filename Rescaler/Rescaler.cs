@@ -54,83 +54,113 @@ namespace Rescaler
                             if (verbose)
                                 Log($"  {database.name.Value}");
 
-                            alldbs.Add(new Database
-                            {
-                                ID = database.id.Value,
-                                Location = database.location.Value,
-                                Edition = database.properties.edition.Value,
-                                Size = database.properties.serviceLevelObjective.Value
-                            });
+                            alldbs.Add(new Database(
+                                database.id.Value,
+                                database.location.Value,
+                                database.properties.edition.Value,
+                                database.properties.serviceLevelObjective.Value));
                         }
                     }
                 }
 
-                for (int i = 0; i < alldbs.Count;)
-                {
-                    if (alldbs[i].ID.EndsWith("/master"))
-                    {
-                        Log($"Excluding: {alldbs[i].ID}");
-                        alldbs.RemoveAt(i);
-                    }
-                    else
-                    {
-                        i++;
-                    }
-                }
-
-                foreach (var filter in filterdbs)
-                {
-                    for (int i = 0; i < alldbs.Count;)
-                    {
-                        if (filter.StartsWith('+'))
-                        {
-                            if (Regex.IsMatch(alldbs[i].ID, filter.Substring(1), RegexOptions.IgnoreCase))
-                            {
-                                i++;
-                            }
-                            else
-                            {
-                                Log($"Excluding: {alldbs[i].ID} (by filter: {filter})");
-                                alldbs.RemoveAt(i);
-                            }
-                        }
-                        else
-                        {
-                            if (Regex.IsMatch(alldbs[i].ID, filter.Substring(1), RegexOptions.IgnoreCase))
-                            {
-                                Log($"Excluding: {alldbs[i].ID} (by filter: {filter})");
-                                alldbs.RemoveAt(i);
-                            }
-                            else
-                            {
-                                i++;
-                            }
-                        }
-                    }
-                }
-
-                for (int i = 0; i < alldbs.Count;)
-                {
-                    if (alldbs[i].Edition == dbedition && alldbs[i].Size == dbsize)
-                    {
-                        Log($"Excluding: {alldbs[i].ID} (by edition and size: {alldbs[i].Edition}/{alldbs[i].Size})");
-                        alldbs.RemoveAt(i);
-                    }
-                    else
-                    {
-                        i++;
-                    }
-                }
+                var includedDBs = FilterDBs(alldbs, filterdbs, dbedition, dbsize);
 
                 if (verbose)
-                    Log($"{servicePrincipal.FriendlyName}: Found {alldbs.Count} databases.");
+                    Log($"{servicePrincipal.FriendlyName}: Matched {includedDBs.Count} databases.");
 
-                foreach (var db in alldbs)
+                foreach (var db in includedDBs)
                 {
-                    Log($"Scaling: {db.ID}: {db.Edition}/{db.Size} -> {dbedition}/{dbsize}");
+                    Log($"Scaling: {db.ShortID}: {db.Edition}/{db.Size} -> {dbedition}/{dbsize}");
                     await ScaleSQLServerAsync(client, db.ID, db.Location, dbedition, dbsize, simulate, verbose);
                 }
             }
+        }
+
+        List<Database> FilterDBs(List<Database> alldbs, string[] filterDBs, string dbedition, string dbsize)
+        {
+            var allDBsExceptMaster = new List<Database>();
+
+            foreach (var db in alldbs)
+            {
+                if (db.DatabaseName == "master")
+                {
+                    Log($"Excluding: {db.ShortID} (by database: master)");
+                }
+                else
+                {
+                    allDBsExceptMaster.Add(db);
+                }
+            }
+
+            var filteredDBs = new List<Database>();
+
+            foreach (var filter in filterDBs)
+            {
+                if (filter.StartsWith('+'))
+                {
+                    foreach (var db in allDBsExceptMaster)
+                    {
+                        if (db.ResourceGroup.Contains(filter.Substring(1), StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            Log($"Including: {db.ShortID} (by filter/resourcegroup: {filter})");
+                            filteredDBs.Add(db);
+                        }
+                        else if (db.Server.Contains(filter.Substring(1), StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            Log($"Including: {db.ShortID} (by filter/server: {filter})");
+                            filteredDBs.Add(db);
+                        }
+                        else if (db.DatabaseName.Contains(filter.Substring(1), StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            Log($"Including: {db.ShortID} (by filter/database: {filter})");
+                            filteredDBs.Add(db);
+                        }
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < filteredDBs.Count;)
+                    {
+                        Database db = filteredDBs[i];
+                        if (db.ResourceGroup.Contains(filter.Substring(1), StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            Log($"Excluding: {db.ShortID} (by filter/resourcegroup: {filter})");
+                            filteredDBs.RemoveAt(i);
+                        }
+                        else if (db.Server.Contains(filter.Substring(1), StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            Log($"Excluding: {db.ShortID} (by filter/server: {filter})");
+                            filteredDBs.RemoveAt(i);
+                        }
+                        else if (db.DatabaseName.Contains(filter.Substring(1), StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            Log($"Excluding: {db.ShortID} (by filter/database: {filter})");
+                            filteredDBs.RemoveAt(i);
+                        }
+                        else
+                        {
+                            i++;
+                        }
+                    }
+                }
+            }
+
+            var resultDBs = new List<Database>();
+
+            foreach (var db in filteredDBs)
+            {
+                if (db.Edition == dbedition && db.Size == dbsize)
+                {
+                    Log($"Excluding: {db.ShortID} (by edition and size: {db.Edition}/{db.Size})");
+                }
+                else
+                {
+                    resultDBs.Add(db);
+                }
+            }
+
+
+            return resultDBs;
         }
 
         async Task ScaleSQLServerAsync(HttpClient client, string dbid, string location, string edition, string level, bool simulate, bool verbose)
