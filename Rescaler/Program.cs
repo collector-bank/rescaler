@@ -15,11 +15,18 @@ namespace Rescaler
             string[] parsedArgs = args.TakeWhile(a => a != "--").ToArray();
             string usage = @"Usage: rescaler [-simulate] [-verbose] <edition> <size> [+includedb1] [-excludedb1] [+includedb2] [-excludedb2] ...
 
-simulate:     Dry run
-verbose:      Verbose logging
-edition:      Basic/Standard/Premium
-size:         Basic/S0.../P1...
-includedb1:   Substring to contain (name of: resource group, server, database)";
+simulate:      Dry run
+verbose:       Verbose logging
+edition:       Basic/Standard/Premium
+size:          Basic/S0.../P1...
+includedb...:  Substring to contain (name of: resource group, server, database)
+
+Specify credentials using a service principal by setting the environment variables:
+AzureTenantId
+AzureClientId
+AzureClientSecret
+
+Multiple service principals can be specified by prefixing/postfixing the environment variables.";
 
             bool simulate = parsedArgs.Contains("-simulate");
             parsedArgs = parsedArgs.Where(a => a != "-simulate").ToArray();
