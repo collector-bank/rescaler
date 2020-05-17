@@ -1,9 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace Rescaler
@@ -18,33 +16,31 @@ namespace Rescaler
 
         public static async Task GetAzureAccessTokensAsync(ServicePrincipal[] servicePrincipals)
         {
-            using (HttpClient client = new HttpClient())
+            using HttpClient client = new HttpClient();
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            string loginurl = "https://login.microsoftonline.com";
+            string managementurlForAuth = "https://management.core.windows.net/";
+
+            foreach (var servicePrincipal in servicePrincipals)
             {
-                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                string url = $"{loginurl}/{servicePrincipal.TenantId}/oauth2/token?api-version=1.0";
+                string data =
+                    $"grant_type={WebUtility.UrlEncode("client_credentials")}&" +
+                    $"resource={WebUtility.UrlEncode(managementurlForAuth)}&" +
+                    $"client_id={WebUtility.UrlEncode(servicePrincipal.ClientId)}&" +
+                    $"client_secret={WebUtility.UrlEncode(servicePrincipal.ClientSecret)}";
 
-                string loginurl = "https://login.microsoftonline.com";
-                string managementurlForAuth = "https://management.core.windows.net/";
-
-                foreach (var servicePrincipal in servicePrincipals)
+                try
                 {
-                    string url = $"{loginurl}/{servicePrincipal.TenantId}/oauth2/token?api-version=1.0";
-                    string data =
-                        $"grant_type={WebUtility.UrlEncode("client_credentials")}&" +
-                        $"resource={WebUtility.UrlEncode(managementurlForAuth)}&" +
-                        $"client_id={WebUtility.UrlEncode(servicePrincipal.ClientId)}&" +
-                        $"client_secret={WebUtility.UrlEncode(servicePrincipal.ClientSecret)}";
+                    dynamic result = await Http.PostHttpStringAsync(client, url, data, "application/x-www-form-urlencoded");
 
-                    try
-                    {
-                        dynamic result = await Http.PostHttpStringAsync(client, url, data, "application/x-www-form-urlencoded");
-
-                        servicePrincipal.AccessToken = result.access_token.Value;
-                    }
-                    catch (HttpRequestException ex)
-                    {
-                        Log($"Couldn't get access token for client {servicePrincipal.FriendlyName}: {ex.Message}");
-                        servicePrincipal.AccessToken = null;
-                    }
+                    servicePrincipal.AccessToken = result.access_token.Value;
+                }
+                catch (HttpRequestException ex)
+                {
+                    Log($"Couldn't get access token for client {servicePrincipal.FriendlyName}: {ex.Message}");
+                    servicePrincipal.AccessToken = null;
                 }
             }
 

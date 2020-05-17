@@ -95,7 +95,7 @@ Multiple service principals can be specified by prefixing/postfixing the environ
             var tasks = accessTokens.Select(accessToken => rescaler.RescaleAsync(accessToken, dbedition, dbsize, filterdbs, simulate, verbose));
             await Task.WhenAll(tasks);
 
-            Log($"Total done: {watch.Elapsed.ToString()}");
+            Log($"Total done: {watch.Elapsed}");
 
             return 0;
         }

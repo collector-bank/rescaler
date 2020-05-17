@@ -1,12 +1,8 @@
 ﻿using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace Rescaler
@@ -15,64 +11,62 @@ namespace Rescaler
     {
         public async Task RescaleAsync(ServicePrincipal servicePrincipal, string dbedition, string dbsize, string[] filterdbs, bool simulate, bool verbose)
         {
-            using (var client = new HttpClient())
+            using var client = new HttpClient();
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", servicePrincipal.AccessToken);
+            client.BaseAddress = new Uri("https://management.azure.com");
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+
+            var alldbs = new List<Database>();
+
+            string url = "/subscriptions?api-version=2016-06-01";
+            dynamic result = await Http.GetHttpStringAsync(client, url);
+            JArray subscriptions = result.value;
+
+            if (verbose)
+                Log($"{servicePrincipal.FriendlyName}: Found {subscriptions.Count} subscriptions.");
+
+            foreach (dynamic subscription in subscriptions)
             {
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", servicePrincipal.AccessToken);
-                client.BaseAddress = new Uri("https://management.azure.com");
-                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-
-                var alldbs = new List<Database>();
-
-                string url = "/subscriptions?api-version=2016-06-01";
-                dynamic result = await Http.GetHttpStringAsync(client, url);
-                JArray subscriptions = result.value;
+                url = $"{subscription.id.Value}/providers/Microsoft.Sql/servers?api-version=2015-05-01-preview";
+                result = await Http.GetHttpStringAsync(client, url);
+                JArray sqlservers = result.value;
 
                 if (verbose)
-                    Log($"{servicePrincipal.FriendlyName}: Found {subscriptions.Count} subscriptions.");
+                    Log($"{servicePrincipal.FriendlyName}: {subscription.displayName}: Found {sqlservers.Count} sqlservers.");
 
-                foreach (dynamic subscription in subscriptions)
+                foreach (dynamic sqlserver in sqlservers)
                 {
-                    url = $"{subscription.id.Value}/providers/Microsoft.Sql/servers?api-version=2015-05-01-preview";
+                    url = $"{sqlserver.id.Value}/databases?api-version=2014-04-01";
                     result = await Http.GetHttpStringAsync(client, url);
-                    JArray sqlservers = result.value;
+                    JArray databases = result.value;
 
                     if (verbose)
-                        Log($"{servicePrincipal.FriendlyName}: {subscription.displayName}: Found {sqlservers.Count} sqlservers.");
+                        Log($"{servicePrincipal.FriendlyName}: {subscription.displayName}: {sqlserver.name.Value}: Found {databases.Count} databases.");
 
-                    foreach (dynamic sqlserver in sqlservers)
+                    foreach (dynamic database in databases)
                     {
-                        url = $"{sqlserver.id.Value}/databases?api-version=2014-04-01";
-                        result = await Http.GetHttpStringAsync(client, url);
-                        JArray databases = result.value;
-
                         if (verbose)
-                            Log($"{servicePrincipal.FriendlyName}: {subscription.displayName}: {sqlserver.name.Value}: Found {databases.Count} databases.");
+                            Log($"  {database.name.Value}");
 
-                        foreach (dynamic database in databases)
-                        {
-                            if (verbose)
-                                Log($"  {database.name.Value}");
-
-                            alldbs.Add(new Database(
-                                database.id.Value,
-                                database.location.Value,
-                                database.properties.edition.Value,
-                                database.properties.serviceLevelObjective.Value));
-                        }
+                        alldbs.Add(new Database(
+                            database.id.Value,
+                            database.location.Value,
+                            database.properties.edition.Value,
+                            database.properties.serviceLevelObjective.Value));
                     }
                 }
+            }
 
-                var includedDBs = FilterDBs(alldbs, filterdbs, dbedition, dbsize);
+            var includedDBs = FilterDBs(alldbs, filterdbs, dbedition, dbsize);
 
-                if (verbose)
-                    Log($"{servicePrincipal.FriendlyName}: Matched {includedDBs.Count} databases.");
+            if (verbose)
+                Log($"{servicePrincipal.FriendlyName}: Matched {includedDBs.Count} databases.");
 
-                foreach (var db in includedDBs)
-                {
-                    Log($"Scaling: {db.ShortID}: {db.Edition}/{db.Size} -> {dbedition}/{dbsize}");
-                    await ScaleSQLServerAsync(client, db.ID, db.Location, dbedition, dbsize, simulate, verbose);
-                }
+            foreach (var db in includedDBs)
+            {
+                Log($"Scaling: {db.ShortID}: {db.Edition}/{db.Size} -> {dbedition}/{dbsize}");
+                await ScaleSQLServerAsync(client, db.ID, db.Location, dbedition, dbsize, simulate, verbose);
             }
         }
 
